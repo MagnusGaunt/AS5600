@@ -188,15 +188,19 @@ public:
   //  READ OUTPUT REGISTERS
   uint16_t rawAngle();
   uint16_t readAngle();
+  uint16_t realAngle();
 
   //  software based offset.
+  //  degrees = -4095 .. 4095 (preferred)
+  //  returns false if abs(parameter) > 36000
+  bool     setOffset(int32_t offsetInput);
+  uint16_t getRealOffset();
   //  degrees = -359.99 .. 359.99 (preferred)
   //  returns false if abs(parameter) > 36000
   //          => expect loss of precision
   bool     setOffset(float degrees);       //  sets an absolute offset
   float    getOffset();
   bool     increaseOffset(float degrees);  //  adds to existing offset.
-
 
   //  READ STATUS REGISTERS
   uint8_t  readStatus();
@@ -234,6 +238,25 @@ public:
   //  returns last position.
   int32_t  resetCumulativePosition(int32_t position = 0);
 
+  //  EXPERIMENTAL SCALED POSITION
+  //  sets the output ratio, upduction if positive, reduction if negative.
+  //  setGearing(4) would mean the encoder will turn 4 times
+  //  per revolution of the shaft, and gearing(-4) is the inverse.
+  //  returns the old ratio.
+  int32_t  setRatio(int32_t outputRatio = 0);
+  //  get the ratio
+  int32_t  getRatio();
+  //  an extremely small min and max likely don't work well(small value untested)
+  //  returns a looped cumulative position, and updates the cumulativePosition
+  int32_t  getBoundedPosition(int32_t min, int32_t max, bool update = true);
+  //  ratio read as encoder:linked shaft
+  //  outputRatio >= 0 means outputRatio:1
+  //  works only if the sensor is read often enough.
+  float  getScaledAngle(bool update = true);
+  //  resets the cumulative position around the offset.
+  //  returns 1 if there was an error.
+  bool  zeroCumulativeToOffset();
+
   //  EXPERIMENTAL 0.5.2
   int      lastError();
 
@@ -266,6 +289,15 @@ protected:
   //  works only if the sensor is read often enough.
   int32_t  _position        = 0;
   int16_t  _lastPosition    = 0;
+
+  //  EXPERIMENTAL
+  //  allows the encoder to use a gear ratio
+  //  ratio read as encoder:linked shaft
+  //  outputRatio >= 0 means output ratio:1
+  //  must be an integer for zeroing to work correctly
+  //  works only if the sensor is read often enough.
+  //  _outputRatio < 0 means a loss of precision
+  int32_t  _outputRatio     = 0;
 };
 
 

@@ -337,6 +337,40 @@ uint16_t AS5600::readAngle()
 }
 
 
+uint16_t AS5600::realAngle()
+{
+  int16_t value = readReg2(AS5600_RAW_ANGLE);
+  value &= 0x0FFF;
+
+  if ((_directionPin == AS5600_SW_DIRECTION_PIN) &&
+      (_direction == AS5600_COUNTERCLOCK_WISE))
+  {
+    value = (4096 - value) & 0x0FFF;
+  }
+  return value;
+}
+
+
+bool AS5600::setOffset(int32_t offsetInput)
+{
+  if (abs(offsetInput) > 36000) return false;
+  bool neg = (offsetInput < 0);
+  if (neg) offsetInput = -offsetInput;
+
+  uint16_t offset = offsetInput;
+  offset &= 0x0FFF;
+  if (neg) offset = (4096 - offset) & 0x0FFF;
+  _offset = offset;
+  return true;
+}
+
+
+uint16_t AS5600::getRealOffset()
+{
+  return _offset;
+}
+
+
 bool AS5600::setOffset(float degrees)
 {
   //  expect loss of precision.
@@ -363,7 +397,6 @@ bool AS5600::increaseOffset(float degrees)
   //  add offset to existing offset in degrees.
   return setOffset((_offset * AS5600_RAW_TO_DEGREES) + degrees);
 }
-
 
 /////////////////////////////////////////////////////////
 //
@@ -541,6 +574,81 @@ int AS5600::lastError()
   int value = _error;
   _error = AS5600_OK;
   return value;
+}
+
+
+/////////////////////////////////////////////////////////
+//
+//  geared position to encoder
+//
+
+int32_t AS5600::setRatio(int32_t outputRatio)
+{
+  int32_t old = _outputRatio;
+  _outputRatio = outputRatio;
+  return old;
+}
+
+int32_t AS5600::getRatio()
+{
+  return _outputRatio;
+}
+
+int32_t AS5600::getBoundedPosition(int32_t min, int32_t max, bool update)
+{
+  int32_t position = getCumulativePosition(update);
+  while (position < min)
+  {
+    position += max + 1 - min;
+    resetCumulativePosition(position);
+  }
+  while (position > max)
+  {
+    position -= max + 1 - min;
+    resetCumulativePosition(position);
+  }
+  return position;
+}
+
+float AS5600::getScaledAngle(bool update)
+{
+  if (_outputRatio == 0){
+    return getBoundedPosition(0, 4095, update) * AS5600_RAW_TO_DEGREES;
+  }
+  else if (_outputRatio > 0)
+  {
+    return getBoundedPosition(0, 4096 * _outputRatio - 1, update) * AS5600_RAW_TO_DEGREES / _outputRatio;
+  }
+  return (getBoundedPosition(0, 4095, update) % (4095 / -_outputRatio)) * -_outputRatio * AS5600_RAW_TO_DEGREES;
+}
+
+
+bool AS5600::zeroCumulativeToOffset()
+{
+  if (_error != AS5600_OK)
+  {
+    return 1;
+  }
+  
+  int position = realAngle();
+
+  if(abs(_offset - position) >> 11)
+  {
+    if (_offset > position)
+    {
+      resetCumulativePosition((position + 4096) - _offset);
+    }
+    else
+    {
+      resetCumulativePosition(position - (_offset + 4096));
+    }
+  }
+  else
+  {
+    resetCumulativePosition(position - _offset);
+  }
+  
+  return 0;
 }
 
 
